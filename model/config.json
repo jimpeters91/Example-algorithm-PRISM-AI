@@ -1,0 +1,5 @@
+{
+    "linear_weights": [0.8, 0.7, 0.9, 0.6],
+    "linear_bias": [-3.0],
+    "baseline_hazards": [-4.5, -4.0, -3.7, -3.5, -3.3]
+}

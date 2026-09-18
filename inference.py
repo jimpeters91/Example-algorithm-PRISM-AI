@@ -51,8 +51,10 @@ import torch.nn as nn
 # ---------------------------------------------------------------------------
 INPUT_PATH    = Path("/input")
 OUTPUT_PATH   = Path("/output")
-RESOURCE_PATH = Path("resources")
 MODEL_DIR     = Path("/opt/ml/model")
+# Resources baked into the container image, next to this script. Used as a
+# fallback when no Model is attached to the algorithm (see load_model).
+RESOURCE_PATH = Path(__file__).resolve().parent / "resources"
 
 # Image sockets are mounted as subfolders of /input/images/<socket-slug>/,
 # but JSON sockets are written as flat files directly in /input/<socket-slug>.json
@@ -132,6 +134,9 @@ def run():
 
     try:
         all_predictions = []
+        # Additional output, stacked per participant in the same order as
+        # all_predictions. Left empty here, so an empty array is written.
+        all_supplementary_output = []
         participant_counter = 0
 
         for stack_idx in range(n_stacks):
@@ -234,10 +239,18 @@ def run():
                 all_predictions.append(preds)
                 print(f"  Participant {participant_counter}: {preds}")
 
+                # Any additional output for this participant can be added here,
+                # e.g. all_supplementary_output.append({"description": "..."}).
+                # Add one entry per participant, so both output files line up.
+
         # --- Write output --------------------------------------------------
         write_json_file(
             location=OUTPUT_PATH / "breast-cancer-development-likelihood-stacked.json",
             content=all_predictions,
+        )
+        write_json_file(
+            location=OUTPUT_PATH / "stacked-supplementary-output.json",
+            content=all_supplementary_output,
         )
         print(f"\nPredictions saved for {participant_counter} participant(s).")
 
@@ -483,13 +496,22 @@ class BreastCancerRiskModel(nn.Module):
 
 
 def load_model(device: torch.device) -> BreastCancerRiskModel:
-    """Load model configuration and weights from the resource / model paths.
+    """Load model configuration and weights from the model path.
     In this example, we load weights, bias and baseline hazards. Your model
     configurations/weights may have a different format.
     """
+    # An attached Model wins, so weights can be updated without rebuilding the
+    # image; otherwise fall back to the copy baked into the image.
     config_path = MODEL_DIR / "config.json"
     if not config_path.exists():
         config_path = RESOURCE_PATH / "config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"No config.json at {MODEL_DIR} or {RESOURCE_PATH}. Either upload "
+            f"model.tar.gz as a separate Model on the algorithm (see do_save.sh), "
+            f"or make sure the Dockerfile copies config.json into the image."
+        )
+    print(f"Loading model configuration from {config_path}")
 
     with open(config_path) as f:
         cfg = json.load(f)

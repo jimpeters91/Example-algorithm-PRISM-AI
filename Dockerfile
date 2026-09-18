@@ -20,4 +20,6 @@ RUN python -m pip install \
 
 COPY --chown=user:user inference.py /opt/app/
 
+COPY --chown=user:user model/config.json /opt/app/resources/config.json
+
 ENTRYPOINT ["python", "inference.py"]
